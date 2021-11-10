@@ -1,0 +1,511 @@
+import pygame, os, sqlite3
+from datetime import *
+
+pygame.font.init()
+
+
+TIMESPEED = 1
+HEIGHT = 750
+WIDTH = 1000
+WIN = pygame.display.set_mode((WIDTH, HEIGHT))
+
+# loading all images
+# crops
+#CORN_STAGE_0 =
+#CORN_STAGE_1 =
+#CORN_STAGE_2 =
+#CORN_STAGE_3 =
+#CORN_STAGE_4 =
+
+#CARROT_STAGE_0 =
+#CARROT_STAGE_1 =
+#CARROT_STAGE_2 =
+#CARROT_STAGE_3 =
+#CARROT_STAGE_4 =
+
+#BLUEBERRIES_STAGE_0 =
+#BLUEBERRIES_STAGE_1 =
+#BLUEBERRIES_STAGE_2 =
+#BLUEBERRIES_STAGE_3 =
+#BLUEBERRIES_STAGE_4 =
+
+
+# field (BG)
+BGfield_img = pygame.transform.scale(pygame.image.load(os.path.join("assets", "backgroundField.png")), (WIDTH, HEIGHT))
+
+# field (plantable)
+field_img = pygame.transform.scale(pygame.image.load(os.path.join("assets", "field_img.png")), (WIDTH, HEIGHT))
+
+# tools
+#WATERING_CAN_IMG =
+
+# player   could always face the user, or could have 4 seperate facing positions
+player_img = pygame.image.load(os.path.join("assets", "player_img.png"))
+
+
+class MyDBInterface(): # this object is used to interact with the SQL database
+    def __init__(self):
+        # if the database doesn't exist then it sets up the empty database
+        self.connection = sqlite3.connect("dbexample.db")
+        self.cursor = self.connection.cursor()
+        #self.createTables()  #Tries to set up the tables
+
+    def createTables(self):
+        # If the database has no tables this sets creates the tables and adds the starting values
+        try:
+            #create crop table and insert some data
+            self.cursor.execute("CREATE TABLE tblCrop (field_id INTEGER PRIMARY KEY AUTOINCREMENT, crop_type TEXT, water_time INTEGER, grow_time INTEGER)") # the data base is saves as: field_id*, where each field has its own number
+            self.cursor.execute("INSERT INTO tblCrop(crop_type, water_time, grow_time) VALUES ('carrot', 150, 20)")                                         # crop_type, which is the type of plant in the field
+            self.cursor.execute("INSERT INTO tblCrop(crop_type, water_time, grow_time) VALUES ('blueberry', 120, 200)")                                     # water_time, which is how long since the plant has been watered
+            self.cursor.execute("INSERT INTO tblCrop(crop_type, water_time, grow_time) VALUES ('melon', 700, 400)")                                         # grow_tim, the time untill growth stage increases
+            #create player  table and insert some data
+            self.cursor.execute("CREATE TABLE tblPlayer (player_id TEXT PRIMARY KEY, money INTEGER, field_id INTEGER, savedDateTime DATETIME)")         # this table is saves as: player_id which sould always be "player1"
+            self.cursor.execute("INSERT INTO tblPlayer(player_id, money, field_id, savedDateTime) VALUES ('player1', 1000, 1, '2021-09-27 14:41:06.7777')")        # money: an integer                                                                                                       # field_id*: each field has its owm number   This means one player has many fields, with each field containing one crop
+            #create link table playergame and insert some data
+            self.cursor.execute("CREATE TABLE tblPlayerGame(playerGame_id INTEGER PRIMARY KEY AUTOINCREMENT,\
+                    field_id INTEGER, \
+                    player_id TEXT, \
+                    FOREIGN KEY (field_id) REFERENCES tblCrop(field_id), \
+                    FOREIGN KEY (player_id) REFERENCES tblPlayer(player_id))")
+            self.cursor.execute("INSERT INTO tblPlayerGame(field_id, player_id) VALUES (1,'player1')") # the linking table which pairs tblCrop's field_id with tblplayer's player_id
+            self.cursor.execute("INSERT INTO tblPlayerGame(field_id, player_id) VALUES (2,'player1')")
+            self.cursor.execute("INSERT INTO tblPlayerGame(field_id, player_id) VALUES (3,'player1')")
+
+            self.connection.commit()
+            print("Tables created")
+        except Exception as err:
+            print("createTables error given as -  " + str(err))
+
+
+    def closeConnection(self):
+        # used to end the connection to the database, which saved all changes made
+        try:
+            self.connection.close()
+        except Exception as err:
+            print("CloseConnection-" + str(err))
+
+
+    def selectCrop(self, fieldNumber):
+        # Returns the crop of a certain field
+        try:
+            returnCrop = self.cursor.execute("SELECT crop_type FROM tblCrop WHERE field_id = ?", (fieldNumber,)).fetchall() # note the comma
+            return (returnCrop)
+        except Exception as err:
+            print("selectCrop error-" + str(err))
+
+
+    def getMoney(self, playerNumber):
+        # Returns money for a player
+        try:
+            #print(self.cursor.execute("SELECT money FROM tblPlayer"))
+            returnMoney = self.cursor.execute("SELECT money FROM tblPlayer WHERE player_id = ?", (playerNumber,)).fetchall() # note the comma
+            return (int(returnMoney[0][0]))
+        except Exception as err:
+            print("getMoney error-" + str(err))
+
+
+
+
+
+    #
+    #   This is the saving section of the database code, that sets all relavant information
+    #
+    #   It should not require its own object as it must interact with the database                    MUST PUT    DB.connection.commit()    AT END OF CODE
+    #
+
+
+
+
+    def setMoney(self, playerNumber, currentMoney):
+        # Sets the players current money (currentMoney)
+        try:
+            self.cursor.execute("UPDATE tblPlayer SET money = ? WHERE player_id = ?", (currentMoney,playerNumber))
+        except Exception as err:
+            print("setMoney error-" + str(err))
+
+
+    def getCurrentDatetime(self):
+        # gets exact CURRENT datetime
+        return(datetime.today())
+
+    def getCurrentDate(self):
+        # gets exact CURRENT date
+        return(date.today())
+
+    def getCurrentTime(self):
+        # gets exact CURRENT time
+        now = datetime.now()
+        currentTime = now.strftime("%H:%M:%S")
+        return(currentTime)
+
+    def setTime(self, playerNumber):
+        # saves the CURRENT time to the database when called, and will not save any further progression of time
+        try:
+            now = self.getCurrentDatetime()
+            self.cursor.execute("UPDATE tblPlayer SET savedDateTime = ? WHERE player_id = ?", (now,playerNumber))
+        except Exception as err:
+            print("setTime error-" + str(err))
+
+
+    def getDateTime(self, playerNumber):
+        # gets the saved datetime from the database
+        try:
+            databaseDatetime = self.cursor.execute("SELECT savedDateTime FROM tblPlayer WHERE player_id = ?", (playerNumber,)).fetchall() # note the comma
+            savedDatetime = databaseDatetime[0][0]
+            savedDatetime = datetime.strptime(savedDatetime, '%Y-%m-%d %H:%M:%S.%f')
+            return(savedDatetime)
+        except Exception as err:
+            print("getDateTime error-" + str(err))
+
+    def getDate(self, playerNumber):
+        # gets the saved time from the database
+        try:
+            databaseDate = self.cursor.execute("SELECT savedDateTime FROM tblPlayer WHERE player_id = ?", (playerNumber,)).fetchall() # note the comma
+            savedDate = databaseTime[0][0]
+            savedDate = datetime.strptime(savedDate, '%Y-%m-%d')
+            return(savedDate)
+        except Exception as err:
+            print("getDate error-" + str(err))
+    def getTime(self, playerNumber):
+        # gets the saved date from the database
+        try:
+            databaseTime = self.cursor.execute("SELECT savedDateTime FROM tblPlayer WHERE player_id = ?", (playerNumber,)).fetchall() # note the comma
+            savedTime = databaseTime[0][0]
+            savedTime = datetime.strptime(savedTime, '%H:%M:%S')
+            return(savedTime)
+        except Exception as err:
+            print("getTime error-" + str(err))
+
+    def getTimeDelta(self):
+        try:
+            currentTimeStamp = self.getCurrentDatetime()
+            savedTimeStamp = self.getDateTime("player1")
+
+            date_delta = currentTimeStamp - savedTimeStamp # calculates the difference between the two datetimes in DAYS-HOURS-MINUTES-SECONDS
+            total_minutes = date_delta.total_seconds() / 60 # calculates the difference between the two datetimes in seconds
+
+            print(total_minutes)
+            return(total_minutes)
+        except Exception as err:
+            print("getTimeDelta error-" + str(err))
+
+
+
+
+
+class TimeInterface():
+    def __init__(self, currentTime, savedTime):
+        self.currentTime = 1
+        self.savedTime =2
+
+
+
+
+
+
+
+
+
+
+
+class Player():
+    def __init__(self, xpos, ypos, player_img, energyLevel=100):
+        self.xpos = xpos
+        self.ypos = ypos
+        self.energyLevel = energyLevel
+        self.player_img = player_img
+
+    def draw(self, window):
+        window.blit(self.player_img, (self.xpos, self.ypos))
+
+    def collision(self, obj):
+        return collide(self, obj)
+
+    def get_height(self):
+        return self.player_img.get_height()
+    def get_width(self):
+        return self.player_img.get_width()
+
+
+
+
+
+
+
+
+
+
+
+
+
+class Map():
+    def __init__(self):
+        self.mapHeight = mapHeight
+        self.mapLength = mapLength
+
+class Field():
+    def __init__(self,  field_img, fieldxpos, fieldypos):
+        self.field_img = field_img
+        self.fieldxpos = fieldxpos
+        self.fieldypos = fieldypos
+        self.watered = False
+        self.heldCrop = ""
+        self.canPlant = True
+
+    def draw(self, window):
+        window.blit(self.field_img, (self.fieldxpos, self.fieldypos))
+
+    def setCrop(self, crop):    # if a crop is being planted, remove the blank slot and put in the new crop
+        self.heldCrop = crop
+        if self.heldCrop == "":
+            self.canPlant = True
+        else:
+            self.canPlant = False
+                                # do this in reverse for harvesting? or make a new one
+
+
+
+
+
+
+
+
+class Crop():
+    def __init__(self):
+        self.growthLevel = 0
+        self.harvestNumber = 1  # the number of times a crop can be harvested
+        self.harvestSize = 1    # the number of crops you get from one harvest
+        self.wateredState = False
+        self.quality = quality
+
+    def increaseGrowthLevel(self):
+        self.growthLevel = self.growthLevel + 1
+        # must change the image aswell
+
+class Corn(Crop):               # each crop has its own class that inherits from the "Crop" superclass
+    def __init__(self):
+        #self.cropImg =
+        self.wateredLevel = 12  # currently 12 is an arbitrary number, it will control how often the crop must be watered to not die
+        self.harvestNumber = 5  # corn can be harvested many times without killing the plant
+        self.quality = quality
+
+class Carrot(Crop):               # each crop has its own class that inherits from the "Crop" superclass
+    def __init__(self):
+        self.wateredLevel = 2  # currently 2 is an arbitrary number, it will control how often the crop must be watered to not die
+        self.harvestNumber = 1 # carrots can only be harvested once
+        self.quality = quality
+
+class Blueberries(Crop):               # each crop has its own class that inherits from the "Crop" superclass
+    def __init__(self):
+        self.wateredLevel = 12  # currently 12 is an arbitrary number, it will control how often the crop must be watered to not die
+        self.harvestNumber = 10 # blueberries can be harvested many times
+        self.harvestSize = 6    # when harvested you receive many blueberries, not just one
+        self.quality = quality
+
+
+
+
+
+
+
+
+class Tool():
+    def __init__(self):
+        self.active = False
+        self.toolQuality = 1    # between 0 and 2, tools can be upgraded to hold more water or till more land
+
+
+
+class WaterBucket(Tool):
+    def __init__(self):
+        self.heldWater = heldWater * self.toolQuality
+        #self.toolImg =
+
+#    def useBucket(self):
+
+
+    def setWaterLevel(self):
+        if  self.heldWater != 0:
+            self.heldWater = self.heldWater - 10 # keeping the amount of water that is consumed per use the same
+#        else:
+                                # if the player doesnt have enough water in their can, they wont be able to water
+
+
+    def setBucketAsActive(self, hoeTool):
+        self.active = True
+        hotTool.active = False
+
+class Hoe(Tool):                                # this whole thing might just be removed, and combine the waterbucket and tool class
+#    def __init__(self):
+        #self.toolImg =
+    def setHoeAsActive(self, bucketTool):
+        self.active = True
+        bucketTool.active = False
+#    def useHoe(self):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def collide(obj1, obj2):
+    offset_x = obj2.xpos - obj1.xpos
+    offset_y = obj2.ypos - obj1.ypos
+    return obj1.mask.overlap(obj2.mask, (offset_x, offset_y)) != None
+
+
+
+# there are a few global variables and classes that must be made here, they do not change but are used in many different functions and classes
+
+DB = MyDBInterface()
+timeDeltaMinutes = round(DB.getTimeDelta())
+main_font = pygame.font.SysFont("comicsans", 40)
+
+def main():
+    run = True
+    FPS = 60
+    player_vel = 5
+
+    player = Player(50, 250, player_img)
+
+    field1 = Field(field_img, WIDTH/2, HEIGHT/2, )
+
+
+    myMoney = DB.getMoney('player1')
+
+
+
+
+    clock = pygame.time.Clock()
+
+    def redraw_window():
+        WIN.blit(BGfield_img, (0,0))
+        # draw text
+        money_label = main_font.render(f"Money: {myMoney}", 1, (255,215,0))
+
+        time_label = main_font.render(f"Time: {DB.getCurrentTime()}", 1, (0,255,50))
+        date_label = main_font.render(f"Date: {DB.getCurrentDate()}", 1, (0,255,0))
+
+        WIN.blit(money_label, (10, 10))
+        WIN.blit(time_label, (WIDTH-(time_label.get_width()+10), 10))
+        WIN.blit(date_label, (WIDTH-(date_label.get_width()+10), 40))
+
+        field1.draw(WIN)
+
+        player.draw(WIN)
+
+
+        pygame.display.update()
+
+    while run == True:
+        clock.tick(FPS)
+        redraw_window()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_a] and player.xpos - player_vel > 0: # left
+            player.xpos -= player_vel
+        if keys[pygame.K_d] and player.xpos + player_vel + player.get_width() < WIDTH: # right
+            player.xpos += player_vel
+        if keys[pygame.K_w] and player.ypos - player_vel > 60: # up
+            player.ypos -= player_vel
+        if keys[pygame.K_s] and player.ypos + player_vel + player.get_height() + 15 < HEIGHT: # down
+            player.ypos += player_vel
+
+        if keys[pygame.K_p]:
+            DB.setMoney("player1", myMoney)
+            DB.setTime("player1")
+            DB.connection.commit()
+        if keys[pygame.K_o]:
+            myMoney = myMoney + 50
+        if keys[pygame.K_u]:
+            print(DB.getDateTime("player1"))
+
+
+
+        # a mock up of how planting will work, the player must be colliding with a field and press SPACE to plant their seeds
+#        if keys[pygame.K_SPACE] and player.collision(FIELD NUMBER) == True:
+#            player.(PLANTCROP)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def main_menu():
+    title_font = pygame.font.SysFont("comicsans", 70)
+    run = True
+    while run:
+        WIN.blit(BGfield_img, (0,0))
+
+        title_label = title_font.render("Press here to load your farm", 1, (255,255,255))
+
+        lastSaveTime = str(DB.getDateTime("player1"))
+        lastSave_label = title_font.render(lastSaveTime, 1, (0,0,0))
+        timeDelta_label = title_font.render(str(timeDeltaMinutes), 1, (0,0,0))
+
+        WIN.blit(title_label, (WIDTH/2 - title_label.get_width()/2, 350))
+        WIN.blit(lastSave_label, (WIDTH/2 - lastSave_label.get_width()/2, 400))
+        WIN.blit(timeDelta_label, (WIDTH/2 - timeDelta_label.get_width()/2, 450))
+        pygame.display.update()
+        for event in pygame.event.get():
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                main()
+            elif event.type == pygame.QUIT:
+                run = False
+
+
+    pygame.quit()
+    DB.closeConnection()
+
+
+main_menu()
+
